@@ -45,7 +45,7 @@ function pipeStream(readPath, writeStream) {
   new Promise(resolve => {
     const readStream = fse.createReadStream(readPath)
     readStream.on('end', () => {
-      fse.unlinkSync(path)
+      fse.unlinkSync(readPath)
       resolve()
     })
     readStream.pipe(writeStream)
@@ -78,7 +78,7 @@ server.on("request", async (req, res) => {
       fse.mkdirSync(chunkDir);
     }
     const blockNum = Math.ceil(size / CHUNK_SIZE);
-    nameMap.set(uploadId, { fileName, blockNum })
+    nameMap.set(uploadId, { fileName, blockNum, size })
 
     res.end(
       JSON.stringify({
@@ -125,14 +125,17 @@ server.on("request", async (req, res) => {
 
   if (req.url === "/upload_finished" && req.method === 'POST') {
     const { uploadId } = await getRequestPayload(req);
-    const { fileName, blockNum } = nameMap.get(uploadId)
+    const { fileName, fileSize, blockNum } = nameMap.get(uploadId)
     const chunkDir = getChunkDir(uploadId)
     const writePath = path.resolve('./uploadFiles', fileName)
     const chunks = fse.readdirSync(chunkDir)
-    await Promise.all(chunks.map(chunkIndex => pipeStream(
-      path.resolve(chunkDir, chunkIndex),
-      fse.createWriteStream(writePath, { start: Number(chunkIndex) * CHUNK_SIZE })
-    )))
+    await Promise.all(chunks.map(chunkIndex => {
+      console.log(`chunkIndex: ${chunkIndex}`);
+      pipeStream(
+        path.resolve(chunkDir, chunkIndex),
+        fse.createWriteStream(writePath, { start: Number(chunkIndex) * CHUNK_SIZE })
+      )
+    }))
     // fse.rmdirSync(chunkDir)
     
     res.end(JSON.stringify({
